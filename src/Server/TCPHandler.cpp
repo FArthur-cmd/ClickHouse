@@ -1156,7 +1156,7 @@ String TCPHandler::receiveReadTaskResponseAssumeLocked()
         {
             state.is_cancelled = true;
             /// For testing connection collector.
-            if (sleep_in_receive_cancel.totalMilliseconds())
+            if (unlikely(sleep_in_receive_cancel.totalMilliseconds()))
             {
                 std::chrono::milliseconds ms(sleep_in_receive_cancel.totalMilliseconds());
                 std::this_thread::sleep_for(ms);
@@ -1189,7 +1189,7 @@ std::optional<PartitionReadResponse> TCPHandler::receivePartitionMergeTreeReadTa
         {
             state.is_cancelled = true;
             /// For testing connection collector.
-            if (sleep_in_receive_cancel.totalMilliseconds())
+            if (unlikely(sleep_in_receive_cancel.totalMilliseconds()))
             {
                 std::chrono::milliseconds ms(sleep_in_receive_cancel.totalMilliseconds());
                 std::this_thread::sleep_for(ms);
@@ -1723,6 +1723,7 @@ void TCPHandler::sendEndOfStream()
 {
     state.sent_all_data = true;
     state.io.setAllDataSent();
+
     writeVarUInt(Protocol::Server::EndOfStream, *out);
     out->next();
 }
