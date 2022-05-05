@@ -532,6 +532,7 @@ void TCPHandler::extractConnectionSettingsFromContext(const ContextPtr & context
     sleep_in_send_tables_status = settings.sleep_in_send_tables_status_ms;
     unknown_packet_in_send_data = settings.unknown_packet_in_send_data;
     sleep_in_receive_cancel = settings.sleep_in_receive_cancel_ms;
+    sleep_after_receiving_query = settings.sleep_after_receiving_query_ms;
 }
 
 
