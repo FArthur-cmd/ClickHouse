@@ -38,10 +38,10 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern const int THERE_IS_NO_PROFILE;
-    extern const int NO_ELEMENTS_IN_CONFIG;
-    extern const int UNKNOWN_ELEMENT_IN_CONFIG;
-    extern const int BAD_ARGUMENTS;
+extern const int THERE_IS_NO_PROFILE;
+extern const int NO_ELEMENTS_IN_CONFIG;
+extern const int UNKNOWN_ELEMENT_IN_CONFIG;
+extern const int BAD_ARGUMENTS;
 }
 
 /** List of settings: type, name, default value, description, flags
@@ -6747,6 +6747,15 @@ The maximum number of columns that can be used in the primary key.
     DECLARE(String, collection_file_path, "/tmp/workload_collection.txt", R"(
 The path to the file where the workload will be collected.
 )", EXPERIMENTAL) \
+    DECLARE(UInt64, advise_index_columns_count, 3, R"(
+The number of columns that will be advised for the minmax index.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, find_best_pk_for_tables, false, R"(
+Find the best primary key for the table for saved workload.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, find_best_minmax_index_for_tables, false, R"(
+Find the best columns for the minmax index for the table for saved workload.
+)", EXPERIMENTAL) \
     /** Experimental tsToGrid aggregate function. */ \
     DECLARE(Bool, allow_experimental_ts_to_grid_aggregate_function, false, R"(
 Experimental tsToGrid aggregate function for Prometheus-like timeseries resampling. Cloud only
@@ -6843,7 +6852,7 @@ Experimental tsToGrid aggregate function for Prometheus-like timeseries resampli
     COMMON_SETTINGS(M, ALIAS)          \
     OBSOLETE_SETTINGS(M, ALIAS)        \
     FORMAT_FACTORY_SETTINGS(M, ALIAS)  \
-    OBSOLETE_FORMAT_SETTINGS(M, ALIAS) \
+    OBSOLETE_FORMAT_SETTINGS(M, ALIAS)
 
 // clang-format on
 
@@ -6899,7 +6908,7 @@ void SettingsImpl::setProfile(const String & profile_name, const Poco::Util::Abs
     {
         if (key == "constraints")
             continue;
-        if (key == "profile" || key.starts_with("profile["))   /// Inheritance of profiles from the current one.
+        if (key == "profile" || key.starts_with("profile[")) /// Inheritance of profiles from the current one.
             setProfile(config.getString(elem + "." + key), config);
         else
             set(key, config.getString(elem + "." + key));
@@ -6956,12 +6965,15 @@ void SettingsImpl::checkNoSettingNamesAtTopLevel(const Poco::Util::AbstractConfi
         bool should_skip_check = name == "max_table_size_to_drop" || name == "max_partition_size_to_drop";
         if (config.has(name) && (setting.getTier() != SettingsTierType::OBSOLETE) && !should_skip_check)
         {
-            throw Exception(ErrorCodes::UNKNOWN_ELEMENT_IN_CONFIG, "A setting '{}' appeared at top level in config {}."
+            throw Exception(
+                ErrorCodes::UNKNOWN_ELEMENT_IN_CONFIG,
+                "A setting '{}' appeared at top level in config {}."
                 " But it is user-level setting that should be located in users.xml inside <profiles> section for specific profile."
                 " You can add it to <profiles><default> if you want to change default value of this setting."
                 " You can also disable the check - specify <skip_check_for_incorrect_settings>1</skip_check_for_incorrect_settings>"
                 " in the main configuration file.",
-                name, config_path);
+                name,
+                config_path);
         }
     }
 }
@@ -6979,7 +6991,10 @@ void SettingsImpl::set(std::string_view name, const Field & value)
     if (name == "compatibility")
     {
         if (value.getType() != Field::Types::Which::String)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unexpected type of value for setting 'compatibility'. Expected String, got {}", value.getTypeName());
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Unexpected type of value for setting 'compatibility'. Expected String, got {}",
+                value.getTypeName());
         applyCompatibilitySetting(value.safeGet<String>());
     }
     /// If we change setting that was changed by compatibility setting before
@@ -7032,27 +7047,29 @@ void SettingsImpl::applyCompatibilitySetting(const String & compatibility_value)
     }
 }
 
-#define INITIALIZE_SETTING_EXTERN(TYPE, NAME, DEFAULT, DESCRIPTION, FLAGS, ...) \
-    Settings ## TYPE NAME = & SettingsImpl :: NAME;
+#define INITIALIZE_SETTING_EXTERN(TYPE, NAME, DEFAULT, DESCRIPTION, FLAGS, ...) Settings##TYPE NAME = &SettingsImpl ::NAME;
 
 namespace Setting
 {
-    LIST_OF_SETTINGS(INITIALIZE_SETTING_EXTERN, INITIALIZE_SETTING_EXTERN)  /// NOLINT (misc-use-internal-linkage)
+LIST_OF_SETTINGS(INITIALIZE_SETTING_EXTERN, INITIALIZE_SETTING_EXTERN) /// NOLINT (misc-use-internal-linkage)
 }
 
 #undef INITIALIZE_SETTING_EXTERN
 
 Settings::Settings()
     : impl(std::make_unique<SettingsImpl>())
-{}
+{
+}
 
 Settings::Settings(const Settings & settings)
     : impl(std::make_unique<SettingsImpl>(*settings.impl))
-{}
+{
+}
 
 Settings::Settings(Settings && settings) noexcept
     : impl(std::make_unique<SettingsImpl>(std::move(*settings.impl)))
-{}
+{
+}
 
 Settings::~Settings() = default;
 
@@ -7259,13 +7276,13 @@ void Settings::addToProgramOptions(std::string_view setting_name, boost::program
     const auto & accessor = SettingsImpl::Traits::Accessor::instance();
     size_t index = accessor.find(setting_name);
     chassert(index != static_cast<size_t>(-1));
-    auto on_program_option = boost::function1<void, const std::string &>(
-            [this, setting_name](const std::string & value)
-            {
-                this->set(setting_name, value);
-            });
-    options.add(boost::shared_ptr<boost::program_options::option_description>(new boost::program_options::option_description(
-            setting_name.data(), boost::program_options::value<std::string>()->composing()->notifier(on_program_option), accessor.getDescription(index)))); // NOLINT
+    auto on_program_option
+        = boost::function1<void, const std::string &>([this, setting_name](const std::string & value) { this->set(setting_name, value); });
+    options.add(
+        boost::shared_ptr<boost::program_options::option_description>(new boost::program_options::option_description(
+            setting_name.data(),
+            boost::program_options::value<std::string>()->composing()->notifier(on_program_option),
+            accessor.getDescription(index)))); // NOLINT
 }
 
 void Settings::addToProgramOptionsAsMultitokens(boost::program_options::options_description & options) const
@@ -7273,7 +7290,8 @@ void Settings::addToProgramOptionsAsMultitokens(boost::program_options::options_
     addProgramOptionsAsMultitokens(*impl, options);
 }
 
-void Settings::addToClientOptions(Poco::Util::LayeredConfiguration &config, const boost::program_options::variables_map &options, bool repeated_settings) const
+void Settings::addToClientOptions(
+    Poco::Util::LayeredConfiguration & config, const boost::program_options::variables_map & options, bool repeated_settings) const
 {
     for (const auto & setting : impl->all())
     {
